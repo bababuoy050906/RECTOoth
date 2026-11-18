@@ -14,8 +14,7 @@
   const $ = (id) => document.getElementById(id);
   const state = {
     manifest: null, activeType: null, staged: null, angles: [],
-    angleIndex: 0, dragX: null, dragOffset: 0,
-    zip: null, prefix: "",
+        zip: null, prefix: "",
     raw: new Map(),        // path -> Promise<blob URL straight from the ZIP>
     converted: new Map(),  // path -> JPEG blob URL made by heic2any
     display: new Map(),    // path -> URL that is known to display correctly
@@ -225,13 +224,320 @@
   }
 
   /* ---------- Stage ---------- */
+  // The 12 angle slides are built once per tooth. While panning, only transform, opacity and a
+  // few discrete blur steps are written, once per animation frame, so nothing is re-created.
+
+  const BLUR_PX = [0, 2, 4, 6.5];
+  const carouselWindow = $("carouselWindow");
+  const scrubTrack = $("scrubTrack");
+  const scrubThumb = $("scrubThumb");
+  const scrubTicks = $("scrubTicks");
+  const reduceMotion = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : { matches: false };
+
+  // Gesture feel per input device (touch tracks the finger 1:1 and glides longest).
+  const FEEL = {
+    touch: { friction: 3.4, minVelocity: 1.2 },
+    pen:   { friction: 4.5, minVelocity: 1.4 },
+    mouse: { friction: 6.0, minVelocity: 1.8 }
+  };
+
+  const view = {
+    pos: 0, vel: 0, mode: "idle",            // idle | drag | inertia | snap
+    target: 0, friction: 4, raf: 0, last: 0,
+    slides: [], spacing: 170, width: 700,
+    pointerId: null, pointerType: "touch", startX: 0, startPos: 0, samples: [],
+    shownIndex: -1,
+    scrub: { trackW: 0, thumbW: 56, range: 1, left: 0, rectLeft: 0, grab: 0, pointerId: null }
+  };
+
+  const mod = (value, n) => ((value % n) + n) % n;
+  const pad2 = (value) => String(value).padStart(2, "0");
+
+  function measure() {
+    view.width = carouselWindow.clientWidth || 700;
+    // One step of spacing equals one angle, so the front image follows the finger 1:1.
+    // Narrow screens use tighter spacing, so a full swipe still travels through several angles.
+    view.spacing = Math.max(64, Math.min(170, view.width * .235));
+    const s = view.scrub;
+    s.trackW = scrubTrack.clientWidth || 300;
+    s.thumbW = scrubThumb.offsetWidth || 56;
+    s.range = Math.max(1, s.trackW - s.thumbW);
+    layoutTicks();
+  }
+
+  function layoutTicks() {
+    const s = view.scrub;
+    const kids = scrubTicks.children;
+    for (let i = 0; i < kids.length; i++) {
+      const frac = Number(kids[i].dataset.frac) || 0;
+      kids[i].style.left = (s.thumbW / 2 + frac * s.range) + "px";
+    }
+  }
+
+  function buildTicks() {
+    scrubTicks.replaceChildren();
+    const n = state.angles.length;
+    state.angles.forEach((angle, i) => {
+      const tick = document.createElement("span");
+      tick.className = `scrub-tick ${angle.surface === "Top" ? "top" : "bottom"}`;
+      tick.dataset.frac = String(n > 1 ? i / (n - 1) : 0);
+      scrubTicks.append(tick);
+    });
+    const topCount = state.angles.filter(a => a.surface === "Top").length;
+    if (n > 1 && topCount > 0 && topCount < n) {
+      const divider = document.createElement("span");
+      divider.className = "scrub-divider";
+      divider.dataset.frac = String((topCount - .5) / (n - 1));
+      scrubTicks.append(divider);
+    }
+  }
+
+  function buildCarousel() {
+    const orbit = $("carouselOrbit");
+    orbit.replaceChildren();
+    view.slides = [];
+    scrubTicks.replaceChildren();
+    view.shownIndex = -1;
+    if (!state.angles.length) {
+      const empty = document.createElement("div");
+      empty.className = "angle-slide";
+      empty.style.transform = "translate(-50%,-50%)";
+      empty.innerHTML = '<span class="angle-placeholder">No angle images available</span>';
+      orbit.append(empty);
+      $("surfaceIndicator").textContent = "NO ANGLES";
+      $("anglePosition").textContent = "— / —";
+      $("scrub").classList.add("hidden");
+      return;
+    }
+    $("scrub").classList.remove("hidden");
+    state.angles.forEach((angle, index) => {
+      const el = document.createElement("div");
+      el.className = "angle-slide";
+      el.style.visibility = "hidden";
+      const img = document.createElement("img");
+      img.alt = `${state.staged.name}, ${angle.surface.toLowerCase()} angle ${index + 1}`;
+      img.draggable = false;
+      img.decoding = "async";
+      el.append(img);
+      orbit.append(el);
+      view.slides.push({ el, img, hidden: true, level: -1, z: null });
+    });
+    buildTicks();
+    measure();
+    render();
+  }
+
+  function render() {
+    const n = view.slides.length;
+    if (!n) return;
+    const p = mod(view.pos, n);
+    const spacing = view.spacing;
+    for (let i = 0; i < n; i++) {
+      const s = view.slides[i];
+      let d = i - p;
+      if (d > n / 2) d -= n;
+      if (d < -n / 2) d += n;
+      const a = Math.abs(d);
+      if (a > 3.4) {
+        if (!s.hidden) { s.el.style.visibility = "hidden"; s.hidden = true; }
+        continue;
+      }
+      if (s.hidden) { s.el.style.visibility = "visible"; s.hidden = false; }
+      const scale = Math.max(.68, 1 - a * .095);
+      s.el.style.transform = `translate3d(${(d * spacing).toFixed(1)}px,0,0) translate(-50%,-50%) scale(${scale.toFixed(3)})`;
+      s.el.style.opacity = Math.max(.16, 1 - a * .23).toFixed(3);
+      const z = 20 - Math.round(a * 4);
+      if (s.z !== z) { s.z = z; s.el.style.zIndex = String(z); }
+      const level = a < .5 ? 0 : a < 1.5 ? 1 : a < 2.5 ? 2 : 3;
+      if (s.level !== level) {
+        s.level = level;
+        s.el.style.filter = level ? `blur(${BLUR_PX[level]}px)` : "none";
+      }
+    }
+    const idx = Math.round(p) % n;
+    if (idx !== view.shownIndex) {
+      view.shownIndex = idx;
+      const angle = state.angles[idx];
+      $("surfaceIndicator").textContent = `${angle.surface.toUpperCase()} VIEW`;
+      $("anglePosition").textContent = `${pad2(idx + 1)} / ${pad2(n)}`;
+      scrubTrack.setAttribute("aria-valuenow", String(idx + 1));
+      scrubTrack.setAttribute("aria-valuetext", `${angle.surface} view, ${idx + 1} of ${n}`);
+    }
+    const sc = view.scrub;
+    const frac = n > 1 ? Math.min(p, n - 1) / (n - 1) : 0;
+    sc.left = frac * sc.range;
+    scrubThumb.style.transform = `translate3d(${sc.left.toFixed(1)}px,0,0)`;
+  }
+
+  function requestFrame() {
+    if (view.raf) return;
+    view.last = performance.now();
+    view.raf = requestAnimationFrame(tick);
+  }
+
+  function tick(now) {
+    view.raf = 0;
+    const dt = Math.min(.05, Math.max(.001, (now - view.last) / 1000));
+    view.last = now;
+    if (view.mode === "inertia") {
+      view.pos += view.vel * dt;
+      view.vel *= Math.exp(-view.friction * dt);
+      if (Math.abs(view.vel) < .7) { view.mode = "snap"; view.target = Math.round(view.pos); }
+    }
+    if (view.mode === "snap") {
+      view.pos += (view.target - view.pos) * (1 - Math.exp(-16 * dt));
+      if (Math.abs(view.target - view.pos) < .003) {
+        const n = state.angles.length || 1;
+        view.pos = mod(view.target, n);
+        view.mode = "idle";
+      }
+    }
+    render();
+    if (view.mode === "inertia" || view.mode === "snap") requestFrame();
+  }
+
+  function startSnap(target) {
+    if (reduceMotion.matches) {
+      const n = state.angles.length || 1;
+      view.pos = mod(target, n);
+      view.mode = "idle";
+      requestFrame();
+      return;
+    }
+    view.mode = "snap";
+    view.target = target;
+    requestFrame();
+  }
+
+  function moveCarousel(delta) {
+    if (!state.angles.length) return;
+    const base = view.mode === "snap" ? view.target : Math.round(view.pos);
+    startSnap(base + delta);
+  }
+
+  /* Dragging the images */
+  carouselWindow.addEventListener("pointerdown", (event) => {
+    if (!state.angles.length || view.pointerId !== null) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    view.pointerId = event.pointerId;
+    view.pointerType = FEEL[event.pointerType] ? event.pointerType : "mouse";
+    view.mode = "drag";
+    view.vel = 0;
+    view.startX = event.clientX;
+    view.startPos = view.pos;
+    view.samples = [{ t: event.timeStamp, x: event.clientX }];
+    carouselWindow.classList.add("dragging");
+    try { carouselWindow.setPointerCapture(event.pointerId); } catch (_) { /* ignore */ }
+  });
+
+  carouselWindow.addEventListener("pointermove", (event) => {
+    if (event.pointerId !== view.pointerId) return;
+    view.pos = view.startPos - (event.clientX - view.startX) / view.spacing;
+    view.samples.push({ t: event.timeStamp, x: event.clientX });
+    while (view.samples.length > 2 && event.timeStamp - view.samples[0].t > 100) view.samples.shift();
+    requestFrame();
+  });
+
+  function endDrag(event) {
+    if (event.pointerId !== view.pointerId) return;
+    view.pointerId = null;
+    carouselWindow.classList.remove("dragging");
+    const feel = FEEL[view.pointerType] || FEEL.mouse;
+    const first = view.samples[0];
+    const last = view.samples[view.samples.length - 1];
+    let velocity = 0;
+    if (first && last && last !== first && event.timeStamp - last.t < 80) {
+      const seconds = (last.t - first.t) / 1000;
+      if (seconds > .01) velocity = -((last.x - first.x) / seconds) / view.spacing;
+    }
+    velocity = Math.max(-16, Math.min(16, velocity));
+    if (!reduceMotion.matches && Math.abs(velocity) >= feel.minVelocity) {
+      view.mode = "inertia";
+      view.vel = velocity;
+      view.friction = feel.friction;
+      requestFrame();
+    } else {
+      startSnap(Math.round(view.pos));
+    }
+  }
+  carouselWindow.addEventListener("pointerup", endDrag);
+  carouselWindow.addEventListener("pointercancel", endDrag);
+
+  /* Mouse wheel and trackpad */
+  let wheelTimer = 0;
+  carouselWindow.addEventListener("wheel", (event) => {
+    if (!state.angles.length || event.ctrlKey) return;
+    let delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    if (!delta) return;
+    event.preventDefault();
+    if (event.deltaMode === 1) delta *= 16;
+    else if (event.deltaMode === 2) delta *= view.width;
+    if (view.pointerId === null) view.mode = "drag";
+    view.pos += (delta / view.spacing) * .6;
+    requestFrame();
+    clearTimeout(wheelTimer);
+    wheelTimer = setTimeout(() => {
+      if (view.pointerId === null && view.scrub.pointerId === null) startSnap(Math.round(view.pos));
+    }, 130);
+  }, { passive: false });
+
+  /* The scrub bar: a horizontal scrollbar-style handle under the images */
+  function scrubValue(clientX) {
+    const s = view.scrub;
+    const left = clientX - s.rectLeft - s.grab;
+    const frac = Math.min(1, Math.max(0, left / s.range));
+    return frac * (state.angles.length - 1);
+  }
+
+  scrubTrack.addEventListener("pointerdown", (event) => {
+    const s = view.scrub;
+    if (!state.angles.length || s.pointerId !== null) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    const rect = scrubTrack.getBoundingClientRect();
+    s.rectLeft = rect.left;
+    s.pointerId = event.pointerId;
+    scrubTrack.classList.add("dragging");
+    view.vel = 0;
+    const onThumb = event.target === scrubThumb;
+    if (onThumb) {
+      s.grab = event.clientX - (rect.left + s.left);   // thumb stays exactly under the finger
+      view.mode = "drag";
+    } else {
+      s.grab = s.thumbW / 2;                           // tap on the track: glide to that angle
+      const n = state.angles.length;
+      startSnap(view.pos + (Math.round(scrubValue(event.clientX)) - mod(view.pos, n)));
+    }
+    try { scrubTrack.setPointerCapture(event.pointerId); } catch (_) { /* ignore */ }
+  });
+
+  scrubTrack.addEventListener("pointermove", (event) => {
+    const s = view.scrub;
+    if (event.pointerId !== s.pointerId) return;
+    view.mode = "drag";
+    view.pos = scrubValue(event.clientX);
+    requestFrame();
+  });
+
+  function endScrub(event) {
+    const s = view.scrub;
+    if (event.pointerId !== s.pointerId) return;
+    s.pointerId = null;
+    scrubTrack.classList.remove("dragging");
+    if (view.mode === "drag") startSnap(Math.round(view.pos));
+  }
+  scrubTrack.addEventListener("pointerup", endScrub);
+  scrubTrack.addEventListener("pointercancel", endScrub);
+
+  window.addEventListener("resize", () => {
+    if (stage.classList.contains("hidden")) return;
+    measure();
+    requestFrame();
+  });
 
   function openStage(tooth) {
     state.staged = tooth;
     state.angles = [...(tooth.top || []).map(path => ({ path, surface: "Top" })),
                     ...(tooth.bottom || []).map(path => ({ path, surface: "Bottom" }))];
-    state.angleIndex = 0;
-    state.dragOffset = 0;
     $("stageName").textContent = tooth.name;
     $("stageType").textContent = `${tooth.type || "TOOTH"} SPECIMEN`;
     $("stageCounter").textContent = tooth.soldOutCopy ? "ARCHIVED SOLD COPY" : "SPECIMEN DETAIL";
@@ -242,8 +548,12 @@
     else thumb.removeAttribute("src");
     stage.classList.remove("hidden");
     document.body.style.overflow = "hidden";
-    renderCarousel();
-    loadAngleImages();
+    view.mode = "idle";
+    view.pos = 0;
+    view.vel = 0;
+    view.pointerId = null;
+    view.scrub.pointerId = null;
+    buildCarousel();
     preloadAngles(tooth);
   }
 
@@ -251,123 +561,25 @@
     stage.classList.add("hidden");
     document.body.style.overflow = "";
     state.staged = null;
+    view.mode = "idle";
+    if (view.raf) { cancelAnimationFrame(view.raf); view.raf = 0; }
     if (state.activeType) catalogView.classList.remove("hidden");
   }
 
-  function wrappedDistance(index, center, length) {
-    let d = index - center;
-    if (d > length / 2) d -= length;
-    if (d < -length / 2) d += length;
-    return d;
-  }
-
-  function renderCarousel() {
-    const orbit = $("carouselOrbit");
-    orbit.replaceChildren();
-    const angles = state.angles;
-    if (!angles.length) {
-      const empty = document.createElement("div");
-      empty.className = "angle-slide";
-      empty.style.transform = "translate(-50%,-50%)";
-      empty.innerHTML = '<span class="angle-placeholder">No angle images available</span>';
-      orbit.append(empty);
-      $("surfaceIndicator").textContent = "NO ANGLES";
-      $("anglePosition").textContent = "— / —";
-      $("angleDots").replaceChildren();
-      return;
-    }
-    const length = angles.length;
-    const width = $("carouselWindow").clientWidth || 700;
-    angles.forEach((angle, index) => {
-      const distance = wrappedDistance(index, state.angleIndex, length) - state.dragOffset;
-      if (Math.abs(distance) > 3.2) return;
-      const abs = Math.abs(distance);
-      const slide = document.createElement("div");
-      slide.className = "angle-slide";
-      const x = distance * Math.min(170, width * .235);
-      const scale = Math.max(.68, 1 - abs * .095);
-      slide.style.transform = `translate(calc(-50% + ${x}px), -50%) scale(${scale})`;
-      slide.style.zIndex = String(20 - Math.round(abs * 4));
-      slide.style.opacity = String(Math.max(.16, 1 - abs * .23));
-      slide.style.filter = `blur(${Math.min(7, abs * 2.1)}px)`;
-      const img = document.createElement("img");
-      img.alt = `${state.staged.name}, ${angle.surface.toLowerCase()} angle ${index + 1}`;
-      img.draggable = false;
-      img.dataset.anglePath = angle.path;
-      const known = state.display.get(angle.path);
-      if (known) { img.src = known; img.dataset.loaded = "true"; }
-      slide.append(img);
-      orbit.append(slide);
-    });
-    const current = angles[state.angleIndex];
-    $("surfaceIndicator").textContent = `${current.surface.toUpperCase()} VIEW`;
-    $("anglePosition").textContent = `${String(state.angleIndex + 1).padStart(2, "0")} / ${String(length).padStart(2, "0")}`;
-    $("angleDots").replaceChildren(...angles.map((_, i) => {
-      const dot = document.createElement("span");
-      if (i === state.angleIndex) dot.classList.add("active");
-      return dot;
-    }));
-  }
-
-  function loadAngleImages() {
-    if (!state.staged) return;
-    $("carouselOrbit").querySelectorAll("img[data-angle-path]").forEach((img) => {
-      if (img.dataset.loaded === "true") return;
-      loadImage(img, img.dataset.anglePath, state.staged.modified);
-    });
-  }
-
-  // Loads the remaining angles one at a time so dragging stays smooth.
+  // Loads the 12 images one at a time, starting with the front image and its neighbours.
   async function preloadAngles(tooth) {
-    for (const angle of state.angles.slice()) {
+    const n = state.angles.length;
+    const order = Array.from({ length: n }, (_, i) => i)
+      .sort((a, b) => Math.min(a, n - a) - Math.min(b, n - b));
+    for (const i of order) {
       if (state.staged !== tooth) return;
-      if (state.display.has(angle.path)) continue;
+      const slide = view.slides[i];
+      if (!slide) continue;
       await new Promise((resolve) => {
-        const img = new Image();
-        loadImage(img, angle.path, tooth.modified, null, resolve);
+        loadImage(slide.img, state.angles[i].path, tooth.modified, null, resolve);
       });
-      if (state.staged === tooth && state.dragX === null) renderCarousel();
     }
   }
-
-  function moveCarousel(delta) {
-    if (!state.angles.length) return;
-    const len = state.angles.length;
-    state.angleIndex = ((state.angleIndex + delta) % len + len) % len;
-    state.dragOffset = 0;
-    renderCarousel();
-    loadAngleImages();
-  }
-
-  const carouselWindow = $("carouselWindow");
-  carouselWindow.addEventListener("pointerdown", (event) => {
-    if (!state.angles.length) return;
-    state.dragX = event.clientX;
-    state.dragOffset = 0;
-    carouselWindow.classList.add("dragging");
-    carouselWindow.setPointerCapture(event.pointerId);
-  });
-  carouselWindow.addEventListener("pointermove", (event) => {
-    if (state.dragX === null || !state.angles.length) return;
-    const dx = event.clientX - state.dragX;
-    const step = Math.max(75, carouselWindow.clientWidth * .22);
-    state.dragOffset = Math.max(-.95, Math.min(.95, -dx / step));
-    renderCarousel();
-  });
-  function finishDrag(event) {
-    if (state.dragX === null) return;
-    const dx = event.clientX - state.dragX;
-    const step = Math.max(75, carouselWindow.clientWidth * .22);
-    const steps = Math.round(Math.abs(dx) / step);
-    if (Math.abs(dx) > 22) moveCarousel(dx < 0 ? Math.max(1, steps) : -Math.max(1, steps));
-    else { state.dragOffset = 0; renderCarousel(); }
-    state.dragX = null;
-    carouselWindow.classList.remove("dragging");
-    loadAngleImages();
-  }
-  carouselWindow.addEventListener("pointerup", finishDrag);
-  carouselWindow.addEventListener("pointercancel", finishDrag);
-  window.addEventListener("resize", () => { if (!stage.classList.contains("hidden")) renderCarousel(); });
 
   /* ---------- Loading Library.zip ---------- */
 
