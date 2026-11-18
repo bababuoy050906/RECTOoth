@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20261119">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
   <!-- heic2any converts HEIC images in browsers that cannot display them natively. -->
   <script defer src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
@@ -18,8 +18,8 @@
   <!-- Leaflet draws the optional meetup map (OpenStreetMap tiles). -->
   <script defer src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
   <!-- Your settings, including the Messenger link. -->
-  <script defer src="config.js"></script>
-  <script defer src="app.js"></script>
+  <script defer src="config.js?v=20261119"></script>
+  <script defer src="app.js?v=20261119"></script>
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -72,29 +72,29 @@
         <button class="type-card" data-type="i" type="button">
           <span class="type-number">01</span><span class="type-art art-incisor"><i></i></span>
           <span class="type-card-bottom"><strong>Incisor</strong><span class="type-count">— available</span></span>
-          <span class="card-arrow"><svg class="icon" aria-hidden="true"><use href="#i-arrow-ne"/></svg></span>
+          <span class="card-arrow"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-arrow-ne"/></svg></span>
         </button>
         <button class="type-card" data-type="c" type="button">
           <span class="type-number">02</span><span class="type-art art-canine"><i></i></span>
           <span class="type-card-bottom"><strong>Canine</strong><span class="type-count">— available</span></span>
-          <span class="card-arrow"><svg class="icon" aria-hidden="true"><use href="#i-arrow-ne"/></svg></span>
+          <span class="card-arrow"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-arrow-ne"/></svg></span>
         </button>
         <button class="type-card" data-type="p" type="button">
           <span class="type-number">03</span><span class="type-art art-premolar"><i></i></span>
           <span class="type-card-bottom"><strong>Premolar</strong><span class="type-count">— available</span></span>
-          <span class="card-arrow"><svg class="icon" aria-hidden="true"><use href="#i-arrow-ne"/></svg></span>
+          <span class="card-arrow"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-arrow-ne"/></svg></span>
         </button>
         <button class="type-card" data-type="m" type="button">
           <span class="type-number">04</span><span class="type-art art-molar"><i></i></span>
           <span class="type-card-bottom"><strong>Molar</strong><span class="type-count">— available</span></span>
-          <span class="card-arrow"><svg class="icon" aria-hidden="true"><use href="#i-arrow-ne"/></svg></span>
+          <span class="card-arrow"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-arrow-ne"/></svg></span>
         </button>
       </div>
       <p class="home-footnote">Specimens are individually photographed. Select a card to inspect its views.</p>
     </section>
 
     <section class="catalog-view hidden" id="catalogView">
-      <button class="back-link" id="backHome" type="button"><span><svg class="icon" aria-hidden="true"><use href="#i-arrow-left"/></svg></span> All tooth types</button>
+      <button class="back-link" id="backHome" type="button"><span><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-arrow-left"/></svg></span> All tooth types</button>
       <div class="catalog-heading">
         <div><span class="micro-label">BROWSE COLLECTION</span><h1 id="catalogTitle">Incisors</h1><p id="catalogSubtitle">Available specimens</p></div>
         <div class="catalog-total" id="catalogTotal">0 pieces</div>
@@ -103,7 +103,7 @@
       <div class="empty-state hidden" id="emptyState"><div class="empty-orbit"><span></span></div><h3>No stock yet</h3><p>There are no specimens in this category right now. Check back after the library is updated.</p></div>
       <div class="sold-section hidden" id="soldSection">
         <button class="sold-toggle" id="soldToggle" type="button" aria-expanded="false">
-          <span><span class="sold-toggle-dot"></span><span id="soldToggleLabel">Sold out versions (0)</span></span><span class="toggle-chevron"><svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></span>
+          <span><span class="sold-toggle-dot"></span><span id="soldToggleLabel">Sold out versions (0)</span></span><span class="toggle-chevron"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></span>
         </button>
         <div class="sold-grid hidden" id="soldGrid"></div>
       </div>
@@ -113,7 +113,7 @@
   <section class="stage hidden" id="stage" aria-modal="true" role="dialog" aria-label="Tooth preview">
     <div class="stage-backdrop" id="stageBackdrop"></div>
     <div class="stage-topline">
-      <button class="stage-back" id="closeStage" type="button"><span><svg class="icon" aria-hidden="true"><use href="#i-arrow-left"/></svg></span> Back to collection</button>
+      <button class="stage-back" id="closeStage" type="button"><span><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-arrow-left"/></svg></span> Back to collection</button>
       <div class="stage-counter" id="stageCounter">SPECIMEN</div>
     </div>
     <div class="stage-content">
@@ -128,9 +128,9 @@
         <div class="viewer-top">
           <span class="viewer-label">ROTATE TO INSPECT</span>
           <div class="zoom-tool" role="group" aria-label="Zoom all angles">
-            <button type="button" id="zoomOut" aria-label="Zoom out"><svg class="icon" aria-hidden="true"><use href="#i-zoom-out"/></svg></button>
+            <button type="button" id="zoomOut" aria-label="Zoom out"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-zoom-out"/></svg></button>
             <span id="zoomLevel">100%</span>
-            <button type="button" id="zoomIn" aria-label="Zoom in"><svg class="icon" aria-hidden="true"><use href="#i-zoom-in"/></svg></button>
+            <button type="button" id="zoomIn" aria-label="Zoom in"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-zoom-in"/></svg></button>
           </div>
           <span class="surface-indicator" id="surfaceIndicator">TOP VIEW</span>
         </div>
@@ -148,7 +148,7 @@
             <div class="scrub-thumb" id="scrubThumb"></div>
           </div>
         </div>
-        <button class="preorder-btn" id="preorderButton" type="button"><svg class="icon" aria-hidden="true"><use href="#i-bag"/></svg><span id="preorderLabel">Pre-order this tooth</span></button>
+        <button class="preorder-btn" id="preorderButton" type="button"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-bag"/></svg><span id="preorderLabel">Pre-order this tooth</span></button>
       </div>
       <p class="stage-hint">Drag the specimen or the slider to examine each angle.</p>
     </div>
@@ -157,14 +157,14 @@
   <section class="modal hidden" id="preorderModal" role="dialog" aria-modal="true" aria-labelledby="preTitle">
     <div class="modal-backdrop" id="preBackdrop"></div>
     <div class="modal-panel" id="preModalPanel">
-      <button class="modal-close" id="preClose" type="button" aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+      <button class="modal-close" id="preClose" type="button" aria-label="Close"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
 
       <form id="preForm" class="pre-form" novalidate>
         <span class="micro-label">PRE-ORDER</span>
         <h2 id="preTitle">Reserve this tooth</h2>
         <div class="pre-summary"><strong id="preToothName">p13</strong><span id="preToothMeta">Premolar</span><span class="pre-price" id="prePrice"></span></div>
 
-        <div class="info-box"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><div><strong>Important information</strong><ul id="preNotes"></ul></div></div>
+        <div class="info-box"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-info"/></svg><div><strong>Important information</strong><ul id="preNotes"></ul></div></div>
 
         <label class="field"><span>Nickname or alias</span>
           <input id="preNick" type="text" maxlength="40" autocomplete="nickname" placeholder="The name we should call you" required></label>
@@ -172,7 +172,7 @@
         <label class="field"><span>Meetup location</span>
           <input id="preLocation" type="text" maxlength="140" placeholder="For example: Mendiola gate, Recto Ave" required></label>
 
-        <button class="map-toggle" id="mapToggle" type="button" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="#i-pin"/></svg><span>Pick a spot on the map (optional)</span><svg class="icon chev" aria-hidden="true"><use href="#i-chevron"/></svg></button>
+        <button class="map-toggle" id="mapToggle" type="button" aria-expanded="false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-pin"/></svg><span>Pick a spot on the map (optional)</span><svg class="icon chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></button>
         <div class="map-box hidden" id="mapBox">
           <div class="pin-map" id="pinMap"></div>
           <div class="pin-row"><span id="pinInfo">Tap the map to drop a pin. The address fills in automatically.</span><button class="mini-btn hidden" id="pinClear" type="button">Clear pin</button></div>
@@ -183,7 +183,7 @@
         <p class="field-note">This is your offer. The seller will confirm it or suggest another time in chat.</p>
 
         <p class="form-error hidden" id="preError" role="alert"></p>
-        <button class="primary-btn" type="submit"><svg class="icon" aria-hidden="true"><use href="#i-bag"/></svg><span>Pre-order</span></button>
+        <button class="primary-btn" type="submit"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-bag"/></svg><span>Pre-order</span></button>
       </form>
 
       <div class="pre-result hidden" id="preResult">
@@ -195,18 +195,18 @@
             <div class="step-head"><span class="step-num">1</span><h3>Copy your message</h3></div>
             <p>You must copy this message and paste it into the chat. The seller uses it to find your order.</p>
             <textarea id="messageBox" rows="9" readonly aria-label="Pre-order message"></textarea>
-            <button class="primary-btn" id="copyBtn" type="button"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg><span id="copyLabel">Copy message</span></button>
+            <button class="primary-btn" id="copyBtn" type="button"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-copy"/></svg><span id="copyLabel">Copy message</span></button>
           </li>
           <li class="step is-locked" id="step2">
             <div class="step-head"><span class="step-num">2</span><h3>Open the chat</h3></div>
             <p>Open the seller's chat, paste the message and send it. This unlocks after you copy the message.</p>
-            <a class="primary-btn" id="chatLink" href="#" target="_blank" rel="noopener noreferrer"><svg class="icon" aria-hidden="true"><use href="#i-chat"/></svg><span>Open chat</span></a>
+            <a class="primary-btn" id="chatLink" href="#" target="_blank" rel="noopener noreferrer"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-chat"/></svg><span>Open chat</span></a>
           </li>
           <li class="step hidden" id="step3">
             <div class="step-head"><span class="step-num">3</span><h3>Attach your meetup map</h3></div>
             <p>Save this image, then attach it in the same chat so the seller can see exactly where you pinned.</p>
             <div class="shot-wrap"><img id="shotImg" alt="Map screenshot of your chosen meetup location"><span id="shotLoading">Preparing map image...</span></div>
-            <a class="secondary-btn is-locked" id="shotDownload" href="#" download><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg><span>Save image</span></a>
+            <a class="secondary-btn is-locked" id="shotDownload" href="#" download><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-download"/></svg><span>Save image</span></a>
           </li>
         </ol>
         <button class="secondary-btn" id="preDone" type="button">Back to the tooth</button>
