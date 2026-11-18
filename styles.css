@@ -100,10 +100,10 @@ h1, h2, h3, p { margin-top: 0; }
 .viewer { max-width: 760px; margin: 55px auto 0; padding: 16px 18px 14px; border: 1px solid #ffffffc2; border-radius: 31px; background: linear-gradient(145deg,#efede7,#e5e3dd); box-shadow: 12px 14px 28px #c7c5bf,-10px -10px 25px #ffffffc9; }
 .viewer-top,.viewer-bottom { display: flex; justify-content: space-between; align-items: center; color: #999a94; font-size: 9px; font-weight: 800; letter-spacing: .12em; }
 .surface-indicator { padding: 7px 11px; border-radius: 20px; background: #e9e7e1; box-shadow: inset 2px 2px 5px #d1cfc9,inset -2px -2px 5px #fff; color: var(--accent); }
-.carousel-window { height: 330px; position: relative; overflow: hidden; touch-action: pan-y; cursor: grab; user-select: none; -webkit-user-select: none; }
+.carousel-window { height: 330px; position: relative; overflow: hidden; touch-action: pan-y; overscroll-behavior: contain; cursor: grab; user-select: none; -webkit-user-select: none; }
 .carousel-window.dragging { cursor: grabbing; }
 .carousel-orbit { position: absolute; inset: 0; }
-.angle-slide { position: absolute; left: 50%; top: 50%; width: min(48%,280px); height: 270px; margin: 0; display: grid; place-items: center; transform-origin: center center; transition: filter .16s, opacity .16s; pointer-events: none; }
+.angle-slide { position: absolute; left: 50%; top: 50%; width: min(48%,280px); height: 270px; margin: 0; display: grid; place-items: center; transform-origin: center center; transition: filter .2s ease; will-change: transform, opacity; backface-visibility: hidden; pointer-events: none; }
 .angle-slide img { max-width: 100%; max-height: 100%; width: 100%; height: 100%; object-fit: contain; padding: 8px; filter: drop-shadow(10px 14px 12px #77756d30); -webkit-user-drag: none; }
 .angle-slide .angle-placeholder { color: #aaa9a2; font-size: 11px; }
 .viewer-center-mark { position: absolute; top: 50%; left: 50%; width: 1px; height: 1px; pointer-events: none; }
@@ -120,3 +120,18 @@ h1, h2, h3, p { margin-top: 0; }
   .stage-topline { padding: 17px 19px; }.stage-content { margin-top: 28px; padding: 0 14px; }.stage-thumb-wrap { top: 62px; right: 16px; width: 57px; height: 57px; border-radius: 17px; }.stage-title h2 { font-size: 48px; }.viewer { margin-top: 43px; padding: 13px 10px 10px; border-radius: 24px; }.carousel-window { height: 285px; }.angle-slide { height: 235px; width: 55%; }.stage-hint { font-size: 10px; }.site-footer { padding: 18px 20px 24px; gap: 12px; font-size: 9px; }.site-footer span:last-child { text-align: right; }
 }
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; } }
+
+/* Scrub bar: horizontal scrollbar-style handle under the angle images */
+.scrub { margin: 12px auto 0; width: min(100%, 520px); }
+.scrub-labels { display: flex; justify-content: space-between; padding: 0 6px 2px; color: #999a94; font-size: 9px; font-weight: 800; letter-spacing: .12em; }
+.scrub-track { position: relative; height: 46px; touch-action: none; cursor: pointer; user-select: none; -webkit-user-select: none; outline: none; }
+.scrub-track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 14px; margin-top: -7px; border-radius: 10px; background: #e7e5df; box-shadow: var(--shadow-in); }
+.scrub-ticks { position: absolute; inset: 0; pointer-events: none; }
+.scrub-tick { position: absolute; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: #c5c3bd; }
+.scrub-tick.top { background: #c9a89f; }
+.scrub-divider { position: absolute; top: 50%; width: 2px; height: 24px; margin: -12px 0 0 -1px; border-radius: 2px; background: #cfcdc6; }
+.scrub-thumb { position: absolute; left: 0; top: 50%; width: 56px; height: 32px; margin-top: -16px; display: grid; place-items: center; border: 1px solid #ffffffc8; border-radius: 16px; background: linear-gradient(145deg, #f5f3ed, #e0ded8); box-shadow: 4px 5px 10px #c3c1bb, -3px -3px 8px #ffffffd0; cursor: grab; will-change: transform; }
+.scrub-thumb::after { content: ""; width: 20px; height: 9px; border-radius: 2px; background: repeating-linear-gradient(90deg, var(--accent) 0 2px, transparent 2px 6px); opacity: .85; pointer-events: none; }
+.scrub-track.dragging .scrub-thumb { cursor: grabbing; box-shadow: 2px 3px 6px #c3c1bb, -2px -2px 5px #ffffffd0; }
+.scrub-track:focus-visible .scrub-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (hover: none) and (pointer: coarse) { .scrub-thumb { width: 62px; height: 36px; margin-top: -18px; border-radius: 18px; } }
