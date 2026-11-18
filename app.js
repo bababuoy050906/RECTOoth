@@ -1,6 +1,8 @@
-/* RECTOoth — manifest-driven static catalogue */
+/* RECTOoth — Library.zip-driven static catalogue */
 (() => {
   "use strict";
+
+  const LIBRARY_ZIP = "Library.zip";
 
   const TYPE_INFO = {
     i: { label: "Incisor", plural: "Incisors" },
@@ -12,8 +14,12 @@
   const $ = (id) => document.getElementById(id);
   const state = {
     manifest: null, activeType: null, staged: null, angles: [],
-    angleIndex: 0, dragX: null, dragOffset: 0, converted: new Map(),
-    imageObservers: null, toastTimer: null
+    angleIndex: 0, dragX: null, dragOffset: 0,
+    zip: null, prefix: "",
+    raw: new Map(),        // path -> Promise<blob URL straight from the ZIP>
+    converted: new Map(),  // path -> JPEG blob URL made by heic2any
+    display: new Map(),    // path -> URL that is known to display correctly
+    loading: false, toastTimer: null
   };
 
   const homeView = $("homeView");
@@ -28,107 +34,120 @@
     state.toastTimer = setTimeout(() => toast.classList.remove("show"), 2800);
   }
 
-  function imageUrl(relativePath, modified) {
-    if (!relativePath) return "";
-    const version = Number(modified || (state.manifest && state.manifest.version) || 0);
-    return `Library/${relativePath}?v=${encodeURIComponent(version)}`;
+  /* ---------- ZIP access ---------- */
+
+  function mimeFor(path) {
+    return /\.heic$/i.test(path) ? "image/heic" : "image/jpeg";
   }
 
-  function supportsHeicNative() {
-    // Test the browser's native decoder with a tiny HEIC data URL.
-    // If this browser cannot decode it, the normal image-error path invokes heic2any.
-    return new Promise((resolve) => {
-      const img = new Image();
-      let settled = false;
-      const finish = (value) => { if (!settled) { settled = true; resolve(value); } };
-      img.onload = () => finish(img.naturalWidth > 0);
-      img.onerror = () => finish(false);
-      img.src = "data:image/heic;base64,AAAAHGZ0eXBtaWYxaGVpYwAAAAxtaWYxbWlhZgAA";
-      setTimeout(() => finish(false), 700);
-    });
+  async function readBlob(path) {
+    const entry = state.zip && state.zip.file(state.prefix + path);
+    if (!entry) throw new Error(`Not found in ${LIBRARY_ZIP}: ${path}`);
+    const data = await entry.async("arraybuffer");
+    return new Blob([data], { type: mimeFor(path) });
   }
 
-  let nativeHeic = false;
-  supportsHeicNative().then((supported) => { nativeHeic = supported; });
+  function getRawUrl(path) {
+    if (!state.raw.has(path)) {
+      const promise = readBlob(path)
+        .then((blob) => URL.createObjectURL(blob))
+        .catch((error) => { state.raw.delete(path); throw error; });
+      state.raw.set(path, promise);
+    }
+    return state.raw.get(path);
+  }
 
-  async function getDisplayUrl(path, modified) {
-    const original = imageUrl(path, modified);
-    if (!path || !/\.heic(?:\?|$)/i.test(path) || nativeHeic) return original;
-    const cacheKey = `${path}|${modified || state.manifest.version}`;
-    if (state.converted.has(cacheKey)) return state.converted.get(cacheKey);
+  async function getConvertedUrl(path) {
+    if (state.converted.has(path)) return state.converted.get(path);
     if (!window.heic2any) throw new Error("HEIC decoder has not loaded");
-    const response = await fetch(original);
-    if (!response.ok) throw new Error(`Image request failed (${response.status})`);
-    const blob = await response.blob();
+    const blob = await readBlob(path);
     const converted = await window.heic2any({ blob, toType: "image/jpeg", quality: 0.88 });
     const jpegBlob = Array.isArray(converted) ? converted[0] : converted;
-    const objectUrl = URL.createObjectURL(jpegBlob);
-    state.converted.set(cacheKey, objectUrl);
-    return objectUrl;
+    const url = URL.createObjectURL(jpegBlob);
+    state.converted.set(path, url);
+    return url;
   }
 
-  function loadImage(img, path, modified, placeholder) {
+  function releaseUrls() {
+    state.raw.forEach((promise) => promise.then((url) => URL.revokeObjectURL(url), () => {}));
+    state.raw.clear();
+    state.converted.forEach((url) => URL.revokeObjectURL(url));
+    state.converted.clear();
+    state.display.clear();
+  }
+
+  /* ---------- Image loading ---------- */
+
+  function loadImage(img, path, modified, placeholder, onSettled) {
+    const settle = (ok) => { if (onSettled) onSettled(ok); };
     if (!path) {
       img.removeAttribute("src");
       if (placeholder) placeholder.textContent = "Image unavailable";
+      settle(false);
       return;
     }
+    const current = () => img.dataset.path === path;
+    const fail = (message) => {
+      if (placeholder) placeholder.textContent = message;
+      settle(false);
+    };
     img.dataset.path = path;
     img.dataset.modified = String(modified || "");
     img.dataset.loaded = "false";
-    img.src = imageUrl(path, modified);
-    img.onerror = async () => {
-      if (img.dataset.fallbackTried === "true") {
-        if (placeholder) placeholder.textContent = "Preview unavailable";
-        return;
-      }
-      if (!/\.heic(?:\?|$)/i.test(path)) {
-        if (placeholder) placeholder.textContent = "Preview unavailable";
-        return;
-      }
-      img.dataset.fallbackTried = "true";
-      try {
-        const url = await getDisplayUrl(path, modified);
-        img.src = url;
-      } catch (error) {
-        console.warn("Could not decode HEIC image:", path, error);
-        if (placeholder) placeholder.textContent = "HEIC preview unavailable";
-      }
-    };
+    img.dataset.fallbackTried = "false";
+
     img.onload = () => {
       img.dataset.loaded = "true";
+      if (current()) state.display.set(path, img.src);
       if (placeholder) placeholder.textContent = "";
+      settle(true);
     };
-  }
+    img.onerror = () => {
+      if (!current()) return;
+      if (img.dataset.fallbackTried === "true" || !/\.heic$/i.test(path)) {
+        fail("Preview unavailable");
+        return;
+      }
+      // This browser cannot display HEIC natively: convert it to JPEG.
+      img.dataset.fallbackTried = "true";
+      getConvertedUrl(path)
+        .then((url) => { if (current()) img.src = url; })
+        .catch((error) => {
+          console.warn("Could not decode HEIC image:", path, error);
+          fail("HEIC preview unavailable");
+        });
+    };
 
-  function createImageElement(path, modified, alt, className) {
-    const img = document.createElement("img");
-    img.alt = alt || "";
-    if (className) img.className = className;
-    if (path) loadImage(img, path, modified);
-    return img;
+    const known = state.display.get(path);
+    if (known) { img.src = known; return; }
+    getRawUrl(path)
+      .then((url) => { if (current()) img.src = url; })
+      .catch((error) => {
+        console.warn("Could not read image from ZIP:", path, error);
+        fail("Image missing");
+      });
   }
 
   function observeLazyImages(root) {
+    const images = root.querySelectorAll("img[data-lazy='true']");
     if (!("IntersectionObserver" in window)) {
-      root.querySelectorAll("img[data-path]").forEach((img) => loadImage(img, img.dataset.path, img.dataset.modified));
+      images.forEach((img) => loadImage(img, img.dataset.path, img.dataset.modified));
       return;
     }
-    if (!state.imageObservers) {
-      state.imageObservers = new IntersectionObserver((entries, observer) => {
+    if (!state.imageObserver) {
+      state.imageObserver = new IntersectionObserver((entries, observer) => {
         entries.forEach((entry) => {
           if (!entry.isIntersecting) return;
           const img = entry.target;
           observer.unobserve(img);
-          const path = img.dataset.path;
-          const modified = Number(img.dataset.modified) || undefined;
-          // First attempt the exact manifest URL. HEIC conversion happens only after a native-load failure.
-          loadImage(img, path, modified);
+          loadImage(img, img.dataset.path, Number(img.dataset.modified) || undefined);
         });
       }, { rootMargin: "180px" });
     }
-    root.querySelectorAll("img[data-lazy='true']").forEach((img) => state.imageObservers.observe(img));
+    images.forEach((img) => state.imageObserver.observe(img));
   }
+
+  /* ---------- Catalogue ---------- */
 
   function makeToothCard(tooth) {
     const button = document.createElement("button");
@@ -145,7 +164,6 @@
     imageWrap.className = "tooth-image-wrap";
     const img = document.createElement("img");
     img.alt = `${tooth.name} tooth thumbnail`;
-    img.loading = "lazy";
     img.dataset.lazy = "true";
     img.dataset.path = tooth.thumbnail || "";
     img.dataset.modified = String(tooth.modified || "");
@@ -171,7 +189,6 @@
       const letter = card.dataset.type;
       const count = teeth.filter(t => t.typeLetter === letter && t.status === "available").length;
       card.querySelector(".type-count").textContent = `${count} available`;
-      card.addEventListener("click", () => openCatalog(letter), { once: true });
     });
   }
 
@@ -185,16 +202,14 @@
     $("catalogTitle").textContent = info.plural;
     const all = (state.manifest.teeth || []).filter(t => t.typeLetter === letter);
     const main = all.filter(t => t.status === "available" || t.status === "marked_sold")
-      .sort((a,b) => a.number - b.number);
+      .sort((a, b) => a.number - b.number);
     const sold = all.filter(t => t.status === "sold_copy")
-      .sort((a,b) => a.number - b.number || (a.romanIndex || 0) - (b.romanIndex || 0));
+      .sort((a, b) => a.number - b.number || (a.romanIndex || 0) - (b.romanIndex || 0));
     $("catalogSubtitle").textContent = `${main.filter(t => t.status === "available").length} available specimens`;
     $("catalogTotal").textContent = `${main.length} ${main.length === 1 ? "piece" : "pieces"}`;
-    const grid = $("toothGrid");
-    grid.replaceChildren(...main.map(makeToothCard));
+    $("toothGrid").replaceChildren(...main.map(makeToothCard));
     $("emptyState").classList.toggle("hidden", main.length !== 0);
-    const soldSection = $("soldSection");
-    soldSection.classList.toggle("hidden", sold.length === 0);
+    $("soldSection").classList.toggle("hidden", sold.length === 0);
     $("soldToggleLabel").textContent = `Sold out versions (${sold.length})`;
     $("soldToggle").setAttribute("aria-expanded", "false");
     $("soldGrid").classList.add("hidden");
@@ -209,6 +224,8 @@
     stage.classList.add("hidden");
   }
 
+  /* ---------- Stage ---------- */
+
   function openStage(tooth) {
     state.staged = tooth;
     state.angles = [...(tooth.top || []).map(path => ({ path, surface: "Top" })),
@@ -221,13 +238,13 @@
     $("stageStatus").textContent = tooth.status === "marked_sold" || tooth.status === "sold_copy" ? "Sold out" : "Available";
     $("stageStatus").classList.toggle("sold", tooth.status !== "available");
     const thumb = $("stageThumb");
-    thumb.onerror = null;
     if (tooth.thumbnail) loadImage(thumb, tooth.thumbnail, tooth.modified);
-    else { thumb.removeAttribute("src"); }
+    else thumb.removeAttribute("src");
     stage.classList.remove("hidden");
     document.body.style.overflow = "hidden";
     renderCarousel();
     loadAngleImages();
+    preloadAngles(tooth);
   }
 
   function closeStage() {
@@ -277,14 +294,15 @@
       img.alt = `${state.staged.name}, ${angle.surface.toLowerCase()} angle ${index + 1}`;
       img.draggable = false;
       img.dataset.anglePath = angle.path;
+      const known = state.display.get(angle.path);
+      if (known) { img.src = known; img.dataset.loaded = "true"; }
       slide.append(img);
       orbit.append(slide);
     });
     const current = angles[state.angleIndex];
     $("surfaceIndicator").textContent = `${current.surface.toUpperCase()} VIEW`;
-    $("anglePosition").textContent = `${String(state.angleIndex + 1).padStart(2,"0")} / ${String(length).padStart(2,"0")}`;
-    const dots = $("angleDots");
-    dots.replaceChildren(...angles.map((_,i) => {
+    $("anglePosition").textContent = `${String(state.angleIndex + 1).padStart(2, "0")} / ${String(length).padStart(2, "0")}`;
+    $("angleDots").replaceChildren(...angles.map((_, i) => {
       const dot = document.createElement("span");
       if (i === state.angleIndex) dot.classList.add("active");
       return dot;
@@ -292,13 +310,24 @@
   }
 
   function loadAngleImages() {
-    const slides = $("carouselOrbit").querySelectorAll("img[data-angle-path]");
-    slides.forEach((img) => {
-      const angle = state.angles.find(a => a.path === img.dataset.anglePath);
-      if (!angle || img.dataset.loaded === "true") return;
-      img.dataset.loaded = "true";
-      loadImage(img, angle.path, state.staged.modified);
+    if (!state.staged) return;
+    $("carouselOrbit").querySelectorAll("img[data-angle-path]").forEach((img) => {
+      if (img.dataset.loaded === "true") return;
+      loadImage(img, img.dataset.anglePath, state.staged.modified);
     });
+  }
+
+  // Loads the remaining angles one at a time so dragging stays smooth.
+  async function preloadAngles(tooth) {
+    for (const angle of state.angles.slice()) {
+      if (state.staged !== tooth) return;
+      if (state.display.has(angle.path)) continue;
+      await new Promise((resolve) => {
+        const img = new Image();
+        loadImage(img, angle.path, tooth.modified, null, resolve);
+      });
+      if (state.staged === tooth && state.dragX === null) renderCarousel();
+    }
   }
 
   function moveCarousel(delta) {
@@ -340,37 +369,93 @@
   carouselWindow.addEventListener("pointercancel", finishDrag);
   window.addEventListener("resize", () => { if (!stage.classList.contains("hidden")) renderCarousel(); });
 
-  async function loadManifest() {
+  /* ---------- Loading Library.zip ---------- */
+
+  async function downloadZip(onProgress) {
+    const response = await fetch(`${LIBRARY_ZIP}?t=${Date.now()}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`${LIBRARY_ZIP} request returned ${response.status}`);
+    const total = Number(response.headers.get("content-length")) || 0;
+    if (!response.body || !response.body.getReader) return response.arrayBuffer();
+    const reader = response.body.getReader();
+    const chunks = [];
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      onProgress(received, total);
+    }
+    const bytes = new Uint8Array(received);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+    return bytes.buffer;
+  }
+
+  function progressText(received, total) {
+    if (total > 0) return `Downloading library… ${Math.min(99, Math.round(received / total * 100))}%`;
+    return `Downloading library… ${(received / 1048576).toFixed(1)} MB`;
+  }
+
+  async function loadLibrary() {
+    if (state.loading) return;
+    state.loading = true;
     $("totalCount").textContent = "Loading library…";
     try {
-      const response = await fetch(`Library/manifest.json?t=${Date.now()}`, { cache: "no-store" });
-      if (!response.ok) throw new Error(`manifest request returned ${response.status}`);
-      const manifest = await response.json();
+      if (!window.JSZip) throw new Error("JSZip has not loaded");
+      const buffer = await downloadZip((received, total) => {
+        $("totalCount").textContent = progressText(received, total);
+      });
+      $("totalCount").textContent = "Opening library…";
+      const zip = await window.JSZip.loadAsync(buffer);
+
+      // Find manifest.json (normally Library/manifest.json), ignoring macOS metadata folders.
+      const candidates = zip.file(/(^|\/)manifest\.json$/).filter(f => !f.name.startsWith("__MACOSX/"));
+      if (!candidates.length) throw new Error(`manifest.json not found inside ${LIBRARY_ZIP}`);
+      candidates.sort((a, b) => a.name.length - b.name.length);
+      const manifestEntry = candidates[0];
+      const prefix = manifestEntry.name.slice(0, manifestEntry.name.length - "manifest.json".length);
+      const manifest = JSON.parse(await manifestEntry.async("string"));
+
       if (!manifest || !Array.isArray(manifest.teeth)) throw new Error("manifest does not contain a teeth array");
       if (Number(manifest.schema) > 1) {
         showToast(`Library schema ${manifest.schema} is newer than this site supports.`);
       } else if (Number(manifest.schema) !== 1) {
         throw new Error(`unsupported library schema: ${manifest.schema}`);
       }
+
+      // Each load is a complete snapshot. Nothing is merged with the previous library.
+      if (!stage.classList.contains("hidden")) closeStage();
+      releaseUrls();
+      state.zip = zip;
+      state.prefix = prefix;
       state.manifest = manifest;
-      // Each refresh is a complete snapshot. No data is merged with previous state.
-      state.converted.forEach(url => URL.revokeObjectURL(url));
-      state.converted.clear();
       renderHome();
       if (state.activeType) openCatalog(state.activeType);
     } catch (error) {
       console.error(error);
-      $("totalCount").textContent = "Library unavailable";
-      showToast("Could not load Library/manifest.json. Check the repo folder and file name.");
-      $("typeGrid").querySelectorAll(".type-count").forEach(el => { el.textContent = "Library unavailable"; });
+      if (state.manifest) {
+        showToast("Could not refresh the library. Showing the previous version.");
+        renderHome();
+      } else {
+        $("totalCount").textContent = "Library unavailable";
+        showToast(`Could not load ${LIBRARY_ZIP}. Check that it is in the repo root.`);
+        $("typeGrid").querySelectorAll(".type-count").forEach(el => { el.textContent = "Library unavailable"; });
+      }
+    } finally {
+      state.loading = false;
     }
   }
 
+  $("typeGrid").addEventListener("click", (event) => {
+    const card = event.target.closest(".type-card");
+    if (card && state.manifest) openCatalog(card.dataset.type);
+  });
   $("backHome").addEventListener("click", returnHome);
   $("homeBrand").addEventListener("click", (event) => { event.preventDefault(); returnHome(); });
   $("closeStage").addEventListener("click", closeStage);
   $("stageBackdrop").addEventListener("click", closeStage);
-  $("refreshButton").addEventListener("click", loadManifest);
+  $("refreshButton").addEventListener("click", loadLibrary);
   $("soldToggle").addEventListener("click", () => {
     const button = $("soldToggle");
     const expanded = button.getAttribute("aria-expanded") === "true";
@@ -385,5 +470,5 @@
     if (event.key === "ArrowLeft") moveCarousel(-1);
   });
 
-  loadManifest();
+  loadLibrary();
 })();
