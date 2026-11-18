@@ -112,9 +112,15 @@
         <div class="viewer-bottom">
           <span>DRAG TO ROTATE</span><span id="anglePosition">01 / 12</span>
         </div>
-        <div class="angle-dots" id="angleDots" aria-hidden="true"></div>
+        <div class="scrub" id="scrub">
+          <div class="scrub-labels" aria-hidden="true"><span>TOP</span><span>BOTTOM</span></div>
+          <div class="scrub-track" id="scrubTrack" role="slider" tabindex="0" aria-label="Rotate specimen" aria-valuemin="1" aria-valuemax="12" aria-valuenow="1">
+            <div class="scrub-ticks" id="scrubTicks"></div>
+            <div class="scrub-thumb" id="scrubThumb"></div>
+          </div>
+        </div>
       </div>
-      <p class="stage-hint">Drag the specimen left or right to examine each angle.</p>
+      <p class="stage-hint">Drag the specimen or the slider to examine each angle.</p>
     </div>
   </section>
 
