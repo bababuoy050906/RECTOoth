@@ -137,7 +137,7 @@ h1, h2, h3, p { margin-top: 0; }
 @media (hover: none) and (pointer: coarse) { .scrub-thumb { width: 62px; height: 36px; margin-top: -18px; border-radius: 18px; } }
 
 /* Custom line icons (no emoji) */
-.icon { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+svg.icon { display: inline-block; width: 18px; height: 18px; max-width: 28px; max-height: 28px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
 .card-arrow .icon { width: 22px; height: 22px; }
 .back-link .icon, .stage-back .icon { width: 17px; height: 17px; vertical-align: -3px; }
 .toggle-chevron { display: inline-flex; }.toggle-chevron .icon { width: 18px; height: 18px; }
