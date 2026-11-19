@@ -915,6 +915,7 @@
     $("preLocation").value = "";
     $("preDate").value = "";
     $("preTime").value = "";
+    syncPickers();
     $("preDate").min = toLocalDate(new Date());
     $("preDate").max = toLocalDate(new Date(Date.now() + 60 * 24 * 60 * 60 * 1000));
     document.querySelectorAll("#preForm .field.invalid").forEach((el) => el.classList.remove("invalid"));
@@ -1022,6 +1023,34 @@
     $("pinClear").classList.add("hidden");
     if (!silent && autofilled) $("preLocation").value = "";
   }
+
+  /* Date and time boxes show the chosen value (or a hint) on top of the invisible native inputs */
+  function syncPickers() {
+    const dateValue = $("preDate").value;
+    const timeValue = $("preTime").value;
+    let dateText = "Choose a date";
+    let timeText = "Choose a time";
+    if (dateValue) {
+      const [y, m, d] = dateValue.split("-").map(Number);
+      dateText = new Date(y, m - 1, d).toLocaleDateString("en-PH", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+    }
+    if (timeValue) {
+      const [hh, mm] = timeValue.split(":").map(Number);
+      timeText = new Date(2000, 0, 1, hh, mm).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" });
+    }
+    $("preDateText").textContent = dateText;
+    $("preTimeText").textContent = timeText;
+    $("preDateBox").classList.toggle("empty", !dateValue);
+    $("preTimeBox").classList.toggle("empty", !timeValue);
+  }
+  ["preDate", "preTime"].forEach((id) => {
+    const input = $(id);
+    input.addEventListener("input", syncPickers);
+    input.addEventListener("change", syncPickers);
+    input.addEventListener("click", () => {            // desktop browsers need an explicit open
+      try { if (input.showPicker) input.showPicker(); } catch (_) { /* the native picker opens on its own */ }
+    });
+  });
 
   $("preLocation").addEventListener("input", () => { pre.edited = true; });
   ["preNick", "preLocation", "preDate", "preTime"].forEach((id) => {
