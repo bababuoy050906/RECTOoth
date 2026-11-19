@@ -3,7 +3,7 @@ window.RECTOOTH_CONFIG = {
   // Replace this placeholder with your own Messenger link. Examples:
   //   https://m.me/your.username     (Facebook profile or page username)
   //   https://m.me/1234567890        (numeric page ID)
-  messengerLink: "https://m.me/al.conti.42788",
+  messengerLink: "http://m.me/al.conti.42788?hash=AbYzVqhUQ8PeHpIg&source_id=6946816",
 
   currencySymbol: "\u20B1",
 
