@@ -37,6 +37,67 @@
   const catalogView = $("catalogView");
   const stage = $("stage");
 
+  /* ---------- Loading screen ---------- */
+  const loader = $("loader");
+  const LOADER_MESSAGES = [
+    "Good teeth take a moment. We are laying out every specimen so you can see each one from all sides.",
+    "Our library is full of high-quality photos, so the first visit takes a little longer. Thank you for waiting.",
+    "Every tooth is photographed from 12 angles, and they are all being set out for you right now.",
+    "Future dentists deserve a proper look. Almost there.",
+    "Tip: once it opens, drag any tooth to turn it around."
+  ];
+  let loaderIndex = 0;
+  let loaderTimer = 0;
+  let loaderShownAt = performance.now();
+
+  function setLoaderStatus(text) {
+    $("loaderStatus").textContent = text;
+  }
+
+  function cycleLoaderMessage() {
+    const el = $("loaderMessage");
+    el.classList.add("is-fading");
+    setTimeout(() => {
+      el.textContent = LOADER_MESSAGES[loaderIndex % LOADER_MESSAGES.length];
+      loaderIndex++;
+      el.classList.remove("is-fading");
+    }, 260);
+  }
+
+  function showLoader() {
+    loaderShownAt = performance.now();
+    loader.classList.remove("hidden", "is-done", "is-error");
+    $("loaderError").classList.add("hidden");
+    $("loaderStatus").classList.remove("hidden");
+    document.body.classList.add("is-loading");
+    clearInterval(loaderTimer);
+    $("loaderMessage").textContent = LOADER_MESSAGES[0];
+    loaderIndex = 1;
+    loaderTimer = setInterval(cycleLoaderMessage, 4200);
+  }
+
+  function hideLoader() {
+    const wait = Math.max(0, 1400 - (performance.now() - loaderShownAt));   // avoid a flash on fast loads
+    setTimeout(() => {
+      clearInterval(loaderTimer);
+      loader.classList.add("is-done");
+      document.body.classList.remove("is-loading");
+      setTimeout(() => loader.classList.add("hidden"), 600);
+    }, wait);
+  }
+
+  function showLoaderError() {
+    clearInterval(loaderTimer);
+    loader.classList.add("is-error");
+    $("loaderMessage").textContent = "Oh no, the library did not arrive.";
+    $("loaderStatus").classList.add("hidden");
+    $("loaderError").classList.remove("hidden");
+  }
+
+  $("loaderRetry").addEventListener("click", () => { showLoader(); loadLibrary(); });
+  loaderTimer = setInterval(cycleLoaderMessage, 4200);
+  loaderIndex = 1;
+
   function formatPeso(value) {
     return CONFIG.currencySymbol + Number(value).toLocaleString("en-PH");
   }
@@ -637,9 +698,9 @@
     $("preorderLabel").textContent = open ? "Pre-order this tooth" : "Sold out";
   }
 
-  function toLocalInput(date) {
+  function toLocalDate(date) {
     const p = (v) => String(v).padStart(2, "0");
-    return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}`;
+    return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
   }
 
   function releaseShot() {
@@ -662,11 +723,11 @@
     }));
     $("preNick").value = pre.lastNick;
     $("preLocation").value = "";
-    $("preWhen").value = "";
-    const soonest = new Date(Date.now() + 60 * 60 * 1000);
-    soonest.setSeconds(0, 0);
-    $("preWhen").min = toLocalInput(soonest);
-    $("preWhen").max = toLocalInput(new Date(Date.now() + 60 * 24 * 60 * 60 * 1000));
+    $("preDate").value = "";
+    $("preTime").value = "";
+    $("preDate").min = toLocalDate(new Date());
+    $("preDate").max = toLocalDate(new Date(Date.now() + 60 * 24 * 60 * 60 * 1000));
+    $("preWhenBox").classList.remove("invalid");
     pre.edited = false;
     clearPin(true);
     $("mapBox").classList.add("hidden");
@@ -773,6 +834,9 @@
   }
 
   $("preLocation").addEventListener("input", () => { pre.edited = true; });
+  ["preDate", "preTime"].forEach((id) => {
+    $(id).addEventListener("input", () => $("preWhenBox").classList.remove("invalid"));
+  });
   $("pinClear").addEventListener("click", () => clearPin(false));
   $("mapToggle").addEventListener("click", () => {
     const box = $("mapBox");
@@ -1012,14 +1076,27 @@
     event.preventDefault();
     const nick = $("preNick").value.trim();
     const place = $("preLocation").value.trim();
-    const whenValue = $("preWhen").value;
+    const dateValue = $("preDate").value;
+    const timeValue = $("preTime").value;
     const err = $("preError");
-    const fail = (message) => { err.textContent = message; err.classList.remove("hidden"); };
-    if (!nick) return fail("Please enter a nickname or alias.");
-    if (place.length < 2) return fail("Please type where you want to meet, or drop a pin on the map.");
-    if (!whenValue) return fail("Please choose a pick-up date and time.");
-    const when = new Date(whenValue);
-    if (Number.isNaN(when.getTime()) || when.getTime() < Date.now()) return fail("Please pick a date and time that is still ahead.");
+    const fail = (message, field) => {
+      err.textContent = message;
+      err.classList.remove("hidden");
+      if (field === $("preDate") || field === $("preTime")) {
+        const box = $("preWhenBox");
+        box.classList.remove("invalid");
+        void box.offsetWidth;               // restart the nudge animation
+        box.classList.add("invalid");
+        box.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+      if (field) field.focus({ preventScroll: true });
+    };
+    if (!nick) return fail("Please enter a nickname or alias.", $("preNick"));
+    if (place.length < 2) return fail("Please type where you want to meet, or drop a pin on the map.", $("preLocation"));
+    if (!dateValue) return fail("Please choose a pick-up date.", $("preDate"));
+    if (!timeValue) return fail("Please choose a pick-up time.", $("preTime"));
+    const when = new Date(`${dateValue}T${timeValue}`);
+    if (Number.isNaN(when.getTime()) || when.getTime() < Date.now()) return fail("That date and time has already passed. Please pick one that is still ahead.", $("preDate"));
     err.classList.add("hidden");
     pre.lastNick = nick;
     showPreorderResult({ nick, place, when });
@@ -1056,13 +1133,16 @@
   async function loadLibrary() {
     if (state.loading) return;
     state.loading = true;
+    if (!state.manifest) { showLoader(); setLoaderStatus("Starting up..."); }
     $("totalCount").textContent = "Loading library…";
     try {
       if (!window.JSZip) throw new Error("JSZip has not loaded");
       const buffer = await downloadZip((received, total) => {
         $("totalCount").textContent = progressText(received, total);
+        setLoaderStatus(progressText(received, total));
       });
       $("totalCount").textContent = "Opening library…";
+      setLoaderStatus("Opening the library...");
       const zip = await window.JSZip.loadAsync(buffer);
 
       // Find manifest.json (normally Library/manifest.json), ignoring macOS metadata folders.
@@ -1086,8 +1166,10 @@
       state.zip = zip;
       state.prefix = prefix;
       state.manifest = manifest;
+      setLoaderStatus("Setting out the specimens...");
       renderHome();
       if (state.activeType) openCatalog(state.activeType);
+      hideLoader();
     } catch (error) {
       console.error(error);
       if (state.manifest) {
@@ -1095,6 +1177,7 @@
         renderHome();
       } else {
         $("totalCount").textContent = "Library unavailable";
+        showLoaderError();
         showToast(`Could not load ${LIBRARY_ZIP}. Check that it is in the repo root.`);
         $("typeGrid").querySelectorAll(".type-count").forEach(el => { el.textContent = "Library unavailable"; });
       }
