@@ -13,6 +13,7 @@ window.RECTOOTH_CONFIG = {
   // Shown in the "Important information" box on the pre-order form.
   preorderNotes: [
     "A pre-order only reserves the tooth. Nothing is paid on this site.",
+    "Choose a pick-up date and time. Pre-orders without them cannot be confirmed.",
     "Send the copied message in chat so the seller can confirm your order.",
     "Meetups happen in public places near Mendiola or Recto. The seller may suggest another place or time.",
     "A map pin is optional. It is only shared through the message and image you send in chat."
