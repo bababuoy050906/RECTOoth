@@ -41,6 +41,7 @@
   const loader = $("loader");
   const LOADER_MESSAGES = [
     "Good teeth take a moment. We are laying out every specimen so you can see each one from all sides.",
+    "While you wait, you can grab the floating teeth and push them around. They always find their way back.",
     "Our library is full of high-quality photos, so the first visit takes a little longer. Thank you for waiting.",
     "Every tooth is photographed from 12 angles, and they are all being set out for you right now.",
     "Future dentists deserve a proper look. Almost there.",
@@ -70,6 +71,8 @@
     $("loaderError").classList.add("hidden");
     $("loaderStatus").classList.remove("hidden");
     document.body.classList.add("is-loading");
+    sim.paused = false;
+    startSim();
     clearInterval(loaderTimer);
     $("loaderMessage").textContent = LOADER_MESSAGES[0];
     loaderIndex = 1;
@@ -82,17 +85,204 @@
       clearInterval(loaderTimer);
       loader.classList.add("is-done");
       document.body.classList.remove("is-loading");
-      setTimeout(() => loader.classList.add("hidden"), 600);
+      setTimeout(() => { loader.classList.add("hidden"); stopSim(); }, 600);
     }, wait);
   }
 
   function showLoaderError() {
     clearInterval(loaderTimer);
     loader.classList.add("is-error");
+    sim.paused = true;
     $("loaderMessage").textContent = "Oh no, the library did not arrive.";
     $("loaderStatus").classList.add("hidden");
     $("loaderError").classList.remove("hidden");
   }
+
+
+  /* Loading teeth: the orbit is computed here so the teeth can be grabbed, dragged and bumped.
+     Each tooth is pulled back to its "home" place on the orbit by a soft spring. */
+  const TOOTH_R = 24;          // collision radius in px
+  const SPRING_K = 9;          // pull back toward the orbit
+  const SPRING_C = 3.6;          // damping, so the return is gradual
+  const LOADER_REDUCED = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)").matches : false;
+  const SIM_CFG = [
+    { angle: -90, phase: 0,   kind: "sway", dur: 1.9, off: 0,   rev: false },
+    { angle: 0,   phase: .8,  kind: "flip", dur: 2.6, off: 0,   rev: false },
+    { angle: 90,  phase: 1.6, kind: "sway", dur: 2.3, off: .7,  rev: true },
+    { angle: 180, phase: 2.4, kind: "flip", dur: 3.1, off: 1.2, rev: true }
+  ];
+  const sim = { raf: 0, last: 0, time: 0, paused: false, cx: 0, cy: 0, minX: -200, maxX: 200, minY: -200, maxY: 200, teeth: [] };
+  const clampNum = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const easeInOut = (p) => p * p * (3 - 2 * p);
+
+  function ringAngle(t) {                       // degrees: turn, pause, turn again
+    const p = (t % 5.2) / 5.2;
+    if (p < .4) return 200 * easeInOut(p / .4);
+    if (p < .55) return 200;
+    return 200 + 160 * easeInOut((p - .55) / .45);
+  }
+  function orbitRadius(t, phase) {              // squeezes in and out, each tooth at its own moment
+    let p = ((t + phase) % 3.2) / 3.2;
+    if (p < 0) p += 1;
+    return p < .45 ? 66 - 44 * easeInOut(p / .45) : 22 + 44 * easeInOut((p - .45) / .55);
+  }
+  function ownMotion(cfg, t) {                  // each tooth sways or flips at its own pace
+    if (cfg.kind === "sway") {
+      const p = ((t + cfg.off) % (cfg.dur * 2)) / (cfg.dur * 2);
+      let u = p < .5 ? p * 2 : 2 - p * 2;
+      if (cfg.rev) u = 1 - u;
+      const e = easeInOut(u);
+      return { rot: -14 + 28 * e, sc: .94 + .16 * e };
+    }
+    let p = ((t + cfg.off) % cfg.dur) / cfg.dur;
+    if (cfg.rev) p = 1 - p;
+    return { rot: 360 * easeInOut(p), sc: 1 - .12 * Math.sin(Math.PI * p) };
+  }
+
+  function measureSim() {
+    const orbit = loader.querySelector(".loader-orbit").getBoundingClientRect();
+    const box = loader.getBoundingClientRect();
+    sim.cx = orbit.left + orbit.width / 2;
+    sim.cy = orbit.top + orbit.height / 2;
+    sim.minX = box.left - sim.cx + TOOTH_R + 6;
+    sim.maxX = box.right - sim.cx - TOOTH_R - 6;
+    sim.minY = box.top - sim.cy + TOOTH_R + 6;
+    sim.maxY = box.bottom - sim.cy - TOOTH_R - 6;
+  }
+
+  function simStep(dt) {
+    if (!sim.paused) sim.time += dt;
+    const t = sim.time;
+    const theta = LOADER_REDUCED ? 0 : ringAngle(t) * Math.PI / 180;
+    const cos = Math.cos(theta), sin = Math.sin(theta);
+    const list = sim.teeth;
+
+    for (const o of list) {                     // where each tooth belongs right now
+      const r = LOADER_REDUCED ? 48 : orbitRadius(t, o.cfg.phase);
+      const a = o.cfg.angle * Math.PI / 180;
+      const lx = r * Math.cos(a), ly = r * Math.sin(a);
+      o.hx = lx * cos - ly * sin;
+      o.hy = lx * sin + ly * cos;
+      const own = LOADER_REDUCED ? { rot: 0, sc: 1 } : ownMotion(o.cfg, t);
+      o.homeRot = theta * 180 / Math.PI + own.rot;
+      o.homeSc = own.sc;
+    }
+
+    for (const o of list) {
+      if (o.held) {                             // follows the finger or cursor
+        const tx = clampNum(o.px + o.grabX, sim.minX, sim.maxX);
+        const ty = clampNum(o.py + o.grabY, sim.minY, sim.maxY);
+        const ndx = tx - o.hx, ndy = ty - o.hy;
+        const blend = Math.min(1, dt * 18);
+        o.vx += ((ndx - o.dx) / dt - o.vx) * blend;
+        o.vy += ((ndy - o.dy) / dt - o.vy) * blend;
+        o.dx = ndx;
+        o.dy = ndy;
+      } else {                                  // drifts gently back to its place
+        o.vx += (-SPRING_K * o.dx - SPRING_C * o.vx) * dt;
+        o.vy += (-SPRING_K * o.dy - SPRING_C * o.vy) * dt;
+        o.dx += o.vx * dt;
+        o.dy += o.vy * dt;
+      }
+    }
+
+    for (let pass = 0; pass < 2; pass++) {      // teeth push each other
+      for (let i = 0; i < list.length; i++) {
+        for (let j = i + 1; j < list.length; j++) {
+          const a = list[i], b = list[j];
+          let ex = (b.hx + b.dx) - (a.hx + a.dx);
+          let ey = (b.hy + b.dy) - (a.hy + a.dy);
+          let dist = Math.hypot(ex, ey);
+          const min = TOOTH_R * 2;
+          if (dist >= min) continue;
+          if (dist < .001) { ex = 1; ey = 0; dist = 1; }
+          const nx = ex / dist, ny = ey / dist, overlap = min - dist;
+          // Teeth that are simply following the orbit pass through each other; only a tooth that
+          // is held, or still wandering back after being pushed, bumps into the others.
+          const stirred = (o) => o.held || Math.hypot(o.dx, o.dy) > 3 || Math.hypot(o.vx, o.vy) > 25;
+          if (!stirred(a) && !stirred(b)) continue;
+          const wa = a.held ? 0 : 1, wb = b.held ? 0 : 1;   // a held tooth cannot be pushed
+          const total = (wa + wb) || 1;
+          a.dx -= nx * overlap * wa / total; a.dy -= ny * overlap * wa / total;
+          b.dx += nx * overlap * wb / total; b.dy += ny * overlap * wb / total;
+          const rel = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+          if (rel < 0) {
+            const impulse = -1.8 * rel / total;
+            a.vx -= impulse * nx * wa; a.vy -= impulse * ny * wa;
+            b.vx += impulse * nx * wb; b.vy += impulse * ny * wb;
+          }
+        }
+      }
+    }
+
+    for (const o of list) {
+      if (!o.held) {                            // keep loose teeth on screen
+        const x = o.hx + o.dx, y = o.hy + o.dy;
+        if (x < sim.minX) { o.dx += sim.minX - x; o.vx = Math.abs(o.vx) * .5; }
+        if (x > sim.maxX) { o.dx += sim.maxX - x; o.vx = -Math.abs(o.vx) * .5; }
+        if (y < sim.minY) { o.dy += sim.minY - y; o.vy = Math.abs(o.vy) * .5; }
+        if (y > sim.maxY) { o.dy += sim.maxY - y; o.vy = -Math.abs(o.vy) * .5; }
+      }
+      o.sc += ((o.held ? 1.18 : 1) - o.sc) * Math.min(1, dt * 14);
+      const tilt = clampNum(o.vx * .035, -22, 22);
+      o.el.style.transform = `translate(${(o.hx + o.dx).toFixed(2)}px, ${(o.hy + o.dy).toFixed(2)}px)`;
+      o.spin.style.transform = `rotate(${(o.homeRot + tilt).toFixed(2)}deg) scale(${(o.homeSc * o.sc).toFixed(3)})`;
+    }
+  }
+
+  function simLoop(now) {
+    sim.raf = requestAnimationFrame(simLoop);
+    const dt = clampNum((now - sim.last) / 1000, .001, .05);
+    sim.last = now;
+    simStep(dt);
+  }
+  function startSim() {
+    if (sim.raf) return;
+    measureSim();
+    sim.last = performance.now();
+    sim.raf = requestAnimationFrame(simLoop);
+  }
+  function stopSim() {
+    if (sim.raf) cancelAnimationFrame(sim.raf);
+    sim.raf = 0;
+  }
+
+  sim.teeth = Array.from(loader.querySelectorAll(".slot")).map((el, i) => ({
+    el, spin: el.querySelector(".spin"), cfg: SIM_CFG[i],
+    hx: 0, hy: 0, homeRot: 0, homeSc: 1, dx: 0, dy: 0, vx: 0, vy: 0, sc: 1,
+    held: false, pid: null, px: 0, py: 0, grabX: 0, grabY: 0
+  }));
+
+  sim.teeth.forEach((o) => {
+    o.el.addEventListener("pointerdown", (event) => {
+      if (o.held) return;
+      event.preventDefault();
+      measureSim();
+      o.held = true;
+      o.pid = event.pointerId;
+      o.px = event.clientX - sim.cx;
+      o.py = event.clientY - sim.cy;
+      o.grabX = (o.hx + o.dx) - o.px;           // the spot you touched stays under your finger
+      o.grabY = (o.hy + o.dy) - o.py;
+      o.el.classList.add("held");
+      try { o.el.setPointerCapture(event.pointerId); } catch (_) { /* ignore */ }
+    });
+    o.el.addEventListener("pointermove", (event) => {
+      if (!o.held || event.pointerId !== o.pid) return;
+      o.px = event.clientX - sim.cx;
+      o.py = event.clientY - sim.cy;
+    });
+    const release = (event) => {
+      if (!o.held || event.pointerId !== o.pid) return;
+      o.held = false;                           // the spring takes over and brings it home
+      o.pid = null;
+      o.el.classList.remove("held");
+    };
+    o.el.addEventListener("pointerup", release);
+    o.el.addEventListener("pointercancel", release);
+  });
+  window.addEventListener("resize", () => { if (sim.raf) measureSim(); });
+  startSim();
 
   $("loaderRetry").addEventListener("click", () => { showLoader(); loadLibrary(); });
   loaderTimer = setInterval(cycleLoaderMessage, 4200);
