@@ -127,7 +127,7 @@
     return p < .45 ? 66 - 44 * easeInOut(p / .45) : 22 + 44 * easeInOut((p - .45) / .55);
   }
   function ownMotion(cfg, t) {                  // each tooth sways or flips at its own pace
-    if (cfg.kind === "sway") {
+    if (cfg.kind === "sway" || LOADER_REDUCED) {      // reduced motion: sway only, no full flips
       const p = ((t + cfg.off) % (cfg.dur * 2)) / (cfg.dur * 2);
       let u = p < .5 ? p * 2 : 2 - p * 2;
       if (cfg.rev) u = 1 - u;
@@ -151,19 +151,19 @@
   }
 
   function simStep(dt) {
-    if (!sim.paused) sim.time += dt;
+    if (!sim.paused) sim.time += dt * (LOADER_REDUCED ? .55 : 1);   // calmer pace when Reduce Motion is on
     const t = sim.time;
-    const theta = LOADER_REDUCED ? 0 : ringAngle(t) * Math.PI / 180;
+    const theta = ringAngle(t) * Math.PI / 180;
     const cos = Math.cos(theta), sin = Math.sin(theta);
     const list = sim.teeth;
 
     for (const o of list) {                     // where each tooth belongs right now
-      const r = LOADER_REDUCED ? 48 : orbitRadius(t, o.cfg.phase);
+      const r = orbitRadius(t, o.cfg.phase);
       const a = o.cfg.angle * Math.PI / 180;
       const lx = r * Math.cos(a), ly = r * Math.sin(a);
       o.hx = lx * cos - ly * sin;
       o.hy = lx * sin + ly * cos;
-      const own = LOADER_REDUCED ? { rot: 0, sc: 1 } : ownMotion(o.cfg, t);
+      const own = ownMotion(o.cfg, t);
       o.homeRot = theta * 180 / Math.PI + own.rot;
       o.homeSc = own.sc;
     }
@@ -517,14 +517,14 @@
   const view = {
     pos: 0, vel: 0, mode: "idle",            // idle | drag | inertia | snap
     target: 0, friction: 4, raf: 0, last: 0,
-    slides: [], spacing: 170, width: 700, zoom: 1, zoomIndex: 1,
+    slides: [], spacing: 170, width: 700, zoom: 1, zoomIndex: 0,
     pointerId: null, pointerType: "touch", startX: 0, startPos: 0, samples: [],
     shownIndex: -1,
     scrub: { trackW: 0, thumbW: 56, range: 1, left: 0, rectLeft: 0, grab: 0, pointerId: null }
   };
 
-  const ZOOM_LEVELS = [0.8, 1, 1.25, 1.5];
-  const step = () => view.spacing * view.zoom;   // pixels per angle at the current zoom
+  const ZOOM_LEVELS = [1, 1.25, 1.5, 1.75, 2];   // 100% to 200%
+  const step = () => view.spacing;   // pixels per angle
   const mod = (value, n) => ((value % n) + n) % n;
   const pad2 = (value) => String(value).padStart(2, "0");
 
@@ -618,7 +618,7 @@
         continue;
       }
       if (s.hidden) { s.el.style.visibility = "visible"; s.hidden = false; }
-      const scale = Math.max(.68, 1 - a * .095) * view.zoom;
+      const scale = Math.max(.68, 1 - a * .095);
       s.el.style.transform = `translate3d(${(d * spacing).toFixed(1)}px,0,0) translate(-50%,-50%) scale(${scale.toFixed(3)})`;
       s.el.style.opacity = Math.max(.16, 1 - a * .23).toFixed(3);
       const z = 20 - Math.round(a * 4);
@@ -687,11 +687,11 @@
   function setZoomIndex(index, redraw = true) {
     view.zoomIndex = Math.max(0, Math.min(ZOOM_LEVELS.length - 1, index));
     view.zoom = ZOOM_LEVELS[view.zoomIndex];
-    carouselWindow.style.setProperty("--zoomh", String(Math.max(1, view.zoom)));
+    carouselWindow.style.setProperty("--zoom", String(view.zoom));
+    carouselWindow.classList.toggle("is-zoomed", view.zoom > 1);
     $("zoomLevel").textContent = `${Math.round(view.zoom * 100)}%`;
     $("zoomOut").disabled = view.zoomIndex === 0;
     $("zoomIn").disabled = view.zoomIndex === ZOOM_LEVELS.length - 1;
-    if (redraw) { measure(); requestFrame(); }
   }
   $("zoomIn").addEventListener("click", () => setZoomIndex(view.zoomIndex + 1));
   $("zoomOut").addEventListener("click", () => setZoomIndex(view.zoomIndex - 1));
@@ -832,7 +832,7 @@
     $("stageStatus").classList.toggle("sold", tooth.status !== "available");
     $("stagePrice").textContent = priceLabel(tooth);
     updatePreorderButton(tooth);
-    setZoomIndex(1, false);
+    setZoomIndex(0);
     const thumb = $("stageThumb");
     if (tooth.thumbnail) loadImage(thumb, tooth.thumbnail, tooth.modified);
     else thumb.removeAttribute("src");
@@ -917,7 +917,7 @@
     $("preTime").value = "";
     $("preDate").min = toLocalDate(new Date());
     $("preDate").max = toLocalDate(new Date(Date.now() + 60 * 24 * 60 * 60 * 1000));
-    $("preWhenBox").classList.remove("invalid");
+    document.querySelectorAll("#preForm .field.invalid").forEach((el) => el.classList.remove("invalid"));
     pre.edited = false;
     clearPin(true);
     $("mapBox").classList.add("hidden");
@@ -1024,8 +1024,8 @@
   }
 
   $("preLocation").addEventListener("input", () => { pre.edited = true; });
-  ["preDate", "preTime"].forEach((id) => {
-    $(id).addEventListener("input", () => $("preWhenBox").classList.remove("invalid"));
+  ["preNick", "preLocation", "preDate", "preTime"].forEach((id) => {
+    $(id).addEventListener("input", () => $(id).closest(".field").classList.remove("invalid"));
   });
   $("pinClear").addEventListener("click", () => clearPin(false));
   $("mapToggle").addEventListener("click", () => {
@@ -1272,14 +1272,15 @@
     const fail = (message, field) => {
       err.textContent = message;
       err.classList.remove("hidden");
-      if (field === $("preDate") || field === $("preTime")) {
-        const box = $("preWhenBox");
-        box.classList.remove("invalid");
-        void box.offsetWidth;               // restart the nudge animation
-        box.classList.add("invalid");
-        box.scrollIntoView({ block: "center", behavior: "smooth" });
+      if (!field) return;
+      const label = field.closest(".field");
+      if (label) {
+        label.classList.remove("invalid");
+        void label.offsetWidth;               // restart the nudge animation
+        label.classList.add("invalid");
       }
-      if (field) field.focus({ preventScroll: true });
+      field.scrollIntoView({ block: "center", behavior: "smooth" });
+      field.focus({ preventScroll: true });
     };
     if (!nick) return fail("Please enter a nickname or alias.", $("preNick"));
     if (place.length < 2) return fail("Please type where you want to meet, or drop a pin on the map.", $("preLocation"));
