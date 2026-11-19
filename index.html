@@ -191,25 +191,20 @@
         <label class="field"><span>Meetup location <em class="req">Required</em></span>
           <input id="preLocation" type="text" maxlength="140" placeholder="For example: Mendiola gate, Recto Ave" required></label>
 
-        <div class="when-box" id="preWhenBox">
-          <div class="when-head">
-            <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-calendar"/></svg>
-            <div><strong>When can we meet?</strong><span>Choose your pick-up date and time</span></div>
-            <em class="req">Required</em>
-          </div>
-          <div class="when-inputs">
-            <label><span>Date</span><input id="preDate" type="date" required></label>
-            <label><span>Time</span><input id="preTime" type="time" required></label>
-          </div>
-          <p class="field-note">This is your offer. The seller will confirm it or suggest another time in chat.</p>
-        </div>
-
         <button class="map-toggle" id="mapToggle" type="button" aria-expanded="false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-pin"/></svg><span>Pick a spot on the map (optional)</span><svg class="icon chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></button>
         <div class="map-box hidden" id="mapBox">
           <div class="pin-map" id="pinMap"></div>
           <div class="pin-row"><span id="pinInfo">Tap the map to drop a pin. The address fills in automatically.</span><button class="mini-btn hidden" id="pinClear" type="button">Clear pin</button></div>
         </div>
 
+
+        <div class="field-row">
+          <label class="field" id="preDateField"><span>Pick-up date <em class="req">Required</em></span>
+            <input id="preDate" type="date" required></label>
+          <label class="field" id="preTimeField"><span>Pick-up time <em class="req">Required</em></span>
+            <input id="preTime" type="time" required></label>
+        </div>
+        <p class="field-note">This is your offered date and time. The seller will confirm it or suggest another in chat.</p>
 
         <p class="form-error hidden" id="preError" role="alert"></p>
         <button class="primary-btn" type="submit"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#i-bag"/></svg><span>Pre-order</span></button>
