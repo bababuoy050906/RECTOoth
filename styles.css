@@ -247,3 +247,12 @@ body.is-loading { overflow: hidden; }
 .field.invalid input { animation: nudge .38s ease; box-shadow: var(--shadow-in), 0 0 0 3px #c9776c; }
 @keyframes nudge { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 60% { transform: translateX(6px); } }
 @media (max-width: 380px) { .field-row { grid-template-columns: 1fr; gap: 0; } }
+
+/* Date and time pickers: a visible box like the other fields; the real input sits on top, invisible, so a tap opens the native picker */
+.pick-box { position: relative; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 16px; border-radius: 16px; background: #e9e7e1; box-shadow: var(--shadow-in); color: var(--ink); font: 600 16px "DM Sans", sans-serif; }
+.pick-box > .icon { width: 20px; height: 20px; color: var(--accent); }
+.pick-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-box.empty .pick-text { color: #a8a6a0; font-weight: 500; }
+.field .pick-box input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; border-radius: 16px; background: transparent; box-shadow: none; opacity: 0; cursor: pointer; font-size: 16px; -webkit-appearance: none; appearance: none; }
+.pick-box:focus-within { box-shadow: var(--shadow-in), 0 0 0 2px var(--accent); }
+.field.invalid .pick-box { animation: nudge .38s ease; box-shadow: var(--shadow-in), 0 0 0 3px #c9776c; }
